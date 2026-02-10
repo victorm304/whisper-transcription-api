@@ -20,10 +20,12 @@ API simples para transcrição de áudio usando **Faster-Whisper**, empacotada e
 ```bash
 curl -X POST "http://localhost:50000/v1/audio/transcriptions?language=pt&beam_size=10" \
   -F "file=@/caminho/do/audio"
+```
 
-## Instalação
+** Instalação **
 
 ```bash
 git clone https://github.com/victorm304/whisper-transcription-api/
 cd whisper-transcription-api
 docker compose up --build
+```
