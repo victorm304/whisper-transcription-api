@@ -22,7 +22,7 @@ curl -X POST "http://localhost:50000/v1/audio/transcriptions?language=pt&beam_si
   -F "file=@/caminho/do/audio"
 ```
 
-** Instalação **
+**Instalação**
 
 ```bash
 git clone https://github.com/victorm304/whisper-transcription-api/
