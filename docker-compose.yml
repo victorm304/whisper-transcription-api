@@ -1,0 +1,16 @@
+services:
+  whisper-api:
+    build: .
+    container_name: whisper-api
+    ports:
+      - "50000:50000"
+    restart: unless-stopped
+    environment:
+      - HF_HOME=/cache/huggingface
+      - TRANSFORMERS_CACHE=/cache/huggingface
+      - XDG_CACHE_HOME=/cache
+    volumes:
+      - whisper_cache:/cache
+
+volumes:
+  whisper_cache:
