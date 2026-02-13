@@ -4,7 +4,7 @@ API simples para transcrição de áudio usando **Faster-Whisper**, empacotada e
 
 ---
 
-## 📌 Endpoint
+## Endpoint
 
 ### `POST /v1/audio/transcriptions`
 
