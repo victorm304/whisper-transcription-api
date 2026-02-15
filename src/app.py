@@ -1,4 +1,6 @@
 import os
+import base64
+import hashlib
 import tempfile
 import redis
 from flask import Flask, request, jsonify
@@ -11,14 +13,33 @@ r = redis.Redis(
     db=0
 )
 
-
-MAX_CONCURRENCY = 1
-MODEL_NAME = "large-v3"
-DEVICE = "cpu"
-COMPUTE_TYPE = "int8"
+PEPPER = os.getenv("JOB_TOKEN_PEPPER", "troque-isto-em-producao")
 
 app = Flask(__name__)
 q = Queue("whisper", connection=r)
+
+
+def gerar_token() -> str:
+    raw = os.urandom(32)
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256((token + PEPPER).encode()).hexdigest()
+
+
+def salvar_token_job(r, job_id: str, token: str, ttl_sec: int = 60 * 5):
+    key = f"job:{job_id}:token_hash"
+    r.setex(key, ttl_sec, hash_token(token))
+
+
+def validar_token_job(r, job_id: str, token_recebido: str) -> bool:
+    key = f"job:{job_id}:token_hash"
+    esperado = r.get(key)
+    if not esperado:
+        return False
+    return esperado.decode() == hash_token(token_recebido)
+
 
 def _salvar_upload_temporario(file_storage) -> str:
     filename = file_storage.filename or ""
@@ -32,14 +53,13 @@ def _salvar_upload_temporario(file_storage) -> str:
     return path
 
 
-
 @app.route("/v1/audio/transcriptions", methods=["POST"])
 def transcrever_um_arquivo():
     f = request.files.get("file")
     if not f:
         return jsonify({"error": "Envie o arquivo em form-data com o campo 'file'."}), 400
 
-    language = request.args.get("language")  # pode ser None
+    language = request.args.get("language")
     beam_size_str = request.args.get("beam_size", "10")
 
     try:
@@ -55,13 +75,30 @@ def transcrever_um_arquivo():
         language,
         beam_size,
         job_timeout=60 * 20,
-        result_ttl=60 * 5,   
+        result_ttl=60 * 5,
     )
 
-    return jsonify({"job_id": job.id, "status": job.get_status()}), 202
+    token = gerar_token()
+    salvar_token_job(r, job.id, token, ttl_sec=60 * 5)
+
+    return jsonify({
+        "job_id": job.id,
+        "status": job.get_status(),
+        "token": token 
+    }), 202
+
 
 @app.route("/v1/audio/transcriptions/<job_id>", methods=["GET"])
 def status_job(job_id):
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return jsonify({"error": "Token ausente"}), 401
+
+    token = auth.removeprefix("Bearer ").strip()
+
+    if not validar_token_job(r, job_id, token):
+        return jsonify({"error": "Token inválido ou expirado"}), 403
+
     try:
         job = Job.fetch(job_id, connection=r)
     except Exception:
