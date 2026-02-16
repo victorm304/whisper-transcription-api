@@ -16,6 +16,7 @@ r = redis.Redis(
 PEPPER = os.getenv("JOB_TOKEN_PEPPER", "troque-isto-em-producao")
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB
 q = Queue("whisper", connection=r)
 
 
