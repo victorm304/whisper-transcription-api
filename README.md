@@ -19,7 +19,7 @@ API simples para transcrição de áudio usando **Faster-Whisper**, empacotada e
 - `beam_size` — inteiro (padrão: 10)
 
 
-**Gerar Api Key**
+**Gerar Api Key:**
 ```bash
 ./gen_key.sh
 ```
@@ -37,7 +37,7 @@ curl -X POST "http://localhost:50000/v1/audio/transcriptions?language=pt&beam_si
 curl -X GET "http://localhost:50000/v1/audio/transcriptions/<job_id>" \
   -H "Authorization: Bearer <API_KEY>"
 ```
-**Instalação**
+**Instalação:**
 
 ```bash
 git clone https://github.com/victorm304/whisper-transcription-api/
