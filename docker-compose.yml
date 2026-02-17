@@ -3,7 +3,7 @@ services:
     build: .
     container_name: whisper-api
     ports:
-      - "50000:50000"
+      - "127.0.0.1:50000:50000"
     environment:
       - HF_HOME=/cache/huggingface
       - TRANSFORMERS_CACHE=/cache/huggingface

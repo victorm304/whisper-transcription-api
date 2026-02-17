@@ -1,6 +1,4 @@
 import os
-import base64
-import hashlib
 import tempfile
 import redis
 from flask import Flask, request, jsonify
@@ -13,33 +11,27 @@ r = redis.Redis(
     db=0
 )
 
-PEPPER = os.getenv("JOB_TOKEN_PEPPER", "troque-isto-em-producao")
-
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB
 q = Queue("whisper", connection=r)
 
 
-def gerar_token() -> str:
-    raw = os.urandom(32)
-    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+def _get_bearer_token() -> str | None:
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    return auth.removeprefix("Bearer ").strip()
 
 
-def hash_token(token: str) -> str:
-    return hashlib.sha256((token + PEPPER).encode()).hexdigest()
+def exigir_api_key():
+    token = _get_bearer_token()
+    if not token:
+        return jsonify({"error": "Token ausente (use Authorization: Bearer <API_KEY>)"}), 401
 
+    if not r.exists(f"api:keys:{token}"):
+        return jsonify({"error": "API key inválida"}), 403
 
-def salvar_token_job(r, job_id: str, token: str, ttl_sec: int = 60 * 5):
-    key = f"job:{job_id}:token_hash"
-    r.setex(key, ttl_sec, hash_token(token))
-
-
-def validar_token_job(r, job_id: str, token_recebido: str) -> bool:
-    key = f"job:{job_id}:token_hash"
-    esperado = r.get(key)
-    if not esperado:
-        return False
-    return esperado.decode() == hash_token(token_recebido)
+    return None
 
 
 def _salvar_upload_temporario(file_storage) -> str:
@@ -56,6 +48,10 @@ def _salvar_upload_temporario(file_storage) -> str:
 
 @app.route("/v1/audio/transcriptions", methods=["POST"])
 def transcrever_um_arquivo():
+    auth_err = exigir_api_key()
+    if auth_err:
+        return auth_err
+
     f = request.files.get("file")
     if not f:
         return jsonify({"error": "Envie o arquivo em form-data com o campo 'file'."}), 400
@@ -79,26 +75,17 @@ def transcrever_um_arquivo():
         result_ttl=60 * 5,
     )
 
-    token = gerar_token()
-    salvar_token_job(r, job.id, token, ttl_sec=60 * 5)
-
     return jsonify({
         "job_id": job.id,
         "status": job.get_status(),
-        "token": token 
     }), 202
 
 
 @app.route("/v1/audio/transcriptions/<job_id>", methods=["GET"])
 def status_job(job_id):
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        return jsonify({"error": "Token ausente"}), 401
-
-    token = auth.removeprefix("Bearer ").strip()
-
-    if not validar_token_job(r, job_id, token):
-        return jsonify({"error": "Token inválido ou expirado"}), 403
+    auth_err = exigir_api_key()
+    if auth_err:
+        return auth_err
 
     try:
         job = Job.fetch(job_id, connection=r)
